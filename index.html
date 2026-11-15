@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Calendario di classe</title>
+</head>
+<body>
+  <h1>Calendario</h1>
+  <form id="nuovo">
+    <input id="titolo" placeholder="Attività" required>
+    <input id="classe" placeholder="Classe">
+    <input id="giorno" type="date" required>
+    <button>Aggiungi</button>
+  </form>
+  <ul id="lista"></ul>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const sb = window.supabase.createClient(
+  'https://jdtrxqstvtrgeyvyxefl.supabase.co',
+  'sb_publishable_y8Kig7DEzF32JUD_GW4Ijw_Lt4ybv9W'
+);
+
+async function carica() {
+  const { data, error } = await sb.from('eventi').select('*').order('giorno');
+  if (error) return alert('Errore: ' + error.message);
+  document.getElementById('lista').innerHTML = data.map(e =>
+    `<li>${e.giorno} · ${e.classe || ''} · ${e.titolo}</li>`).join('');
+}
+
+document.getElementById('nuovo').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  await sb.from('eventi').insert({
+    titolo: document.getElementById('titolo').value,
+    classe: document.getElementById('classe').value,
+    giorno: document.getElementById('giorno').value
+  });
+  ev.target.reset();
+  carica();
+});
+
+carica();
+</script>
+</body>
+</html>
