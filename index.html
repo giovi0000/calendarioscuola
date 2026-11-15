@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Calendario di classe</title>
+<title>Calendario</title>
 <style>
 :root{--bg:#f4f8f6;--panel:#fff;--fg:#2d3a34;--muted:#748279;--line:#d6e4dc;--accent:#2f7a5b;--soft:#e6f2ec}
 *{box-sizing:border-box}
@@ -20,9 +20,9 @@ button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);
 .legenda{display:flex;gap:12px;flex-wrap:wrap;font-size:12px}
 .pallino{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
 
-/* layout: pannello a sinistra, calendario a destra */
-.layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:12px;align-items:start}
-@media(max-width:800px){.layout{grid-template-columns:1fr}.pannello{position:static!important}}
+/* layout: calendario a sinistra, attività a destra */
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:12px;align-items:start}
+@media(max-width:900px){.layout{grid-template-columns:1fr}.pannello{position:static!important}}
 .pannello{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px;position:sticky;top:12px}
 .pannello h2{font-size:15px;margin:0}
 .nota{font-size:12px;color:var(--muted);margin:0}
@@ -72,7 +72,7 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
 <body>
 <div class="wrap">
   <div class="bar">
-    <h1>Calendario di classe</h1>
+    <h1>Calendario</h1>
     <span class="spacer"></span>
     <button id="prev" aria-label="Precedente">‹</button>
     <span id="periodo"></span>
@@ -85,18 +85,17 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
   <div class="legenda" id="legenda"></div>
 
   <div class="layout">
+    <div id="cal"></div>
     <aside class="pannello" id="pannelloBozze">
-      <h2>Da programmare</h2>
+      <h2>Attività</h2>
       <p class="nota">Trascina un’attività in un giorno. Su telefono: tocca l’attività, poi tocca il giorno.</p>
       <form class="rapida" onsubmit="return false">
         <input id="rTitolo" placeholder="Nuova attività">
-        <input id="rClasse" placeholder="Classe (facoltativa)">
         <select id="rCat"></select>
         <button type="button" id="rAdd" class="primary">Aggiungi alla lista</button>
       </form>
       <div id="listaBozze" data-drop="bozze"></div>
     </aside>
-    <div id="cal"></div>
   </div>
 
   <div id="stato"></div>
@@ -106,8 +105,7 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
   <form onsubmit="return false">
     <h3 id="dlgTitolo" style="margin:0;font-size:16px">Nuova attività</h3>
     <label>Attività <input id="fTitolo"></label>
-    <label>Classe <input id="fClasse" placeholder="es. 3ª A"></label>
-    <label>Giorno (vuoto = da programmare) <input id="fGiorno" type="date"></label>
+    <label>Giorno (vuoto = in lista) <input id="fGiorno" type="date"></label>
     <div class="riga">
       <label>Dalle <input id="fInizio" type="time"></label>
       <label>Alle <input id="fFine" type="time"></label>
@@ -147,7 +145,7 @@ let vista = 'settimana';
 let inizioSett = lunedi(new Date());
 let mese = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let modifica = null;
-let selezionata = null;   // attività della lista scelta da tocco (per telefono)
+let selezionata = null;   // attività scelta dalla lista con il tocco (telefono)
 
 // ---- utilità ----
 const $ = id => document.getElementById(id);
@@ -176,8 +174,7 @@ async function salva(){
   if (inizio && fine && fine <= inizio){ alert('L’orario di fine deve essere dopo quello di inizio.'); return; }
   const riga = {
     titolo,
-    giorno: $('fGiorno').value || null,   // vuoto = resta nella lista da programmare
-    classe: $('fClasse').value.trim() || null,
+    giorno: $('fGiorno').value || null,
     ora_inizio: inizio, ora_fine: fine,
     categoria: $('fCat').value,
     fatto: $('fFatto').checked
@@ -203,21 +200,19 @@ async function aggiungiAllaLista(){
   if (!titolo){ stato('Scrivi il nome dell’attività.'); return; }
   const { error } = await sb.from('eventi').insert({
     titolo,
-    classe: $('rClasse').value.trim() || null,
     categoria: $('rCat').value,
     giorno: null,
     fatto: false
   });
   if (error){ alert('Non salvato: ' + error.message); return; }
   $('rTitolo').value = '';
-  $('rClasse').value = '';
   carica();
 }
 
 // sposta un'attività in un altro giorno (o nella lista se giorno è null)
 async function sposta(id, giorno){
   const e = eventi.find(x => x.id === id);
-  if (!e || e.giorno === giorno) { selezionata = null; disegna(); return; }
+  if (!e || e.giorno === giorno){ selezionata = null; disegna(); return; }
   const { error } = await sb.from('eventi').update({ giorno }).eq('id', id);
   if (error){ stato('Spostamento non riuscito: ' + error.message); return; }
   selezionata = null;
@@ -229,7 +224,6 @@ function apriForm(e, giorno){
   modifica = e || null;
   $('dlgTitolo').textContent = e ? 'Modifica attività' : 'Nuova attività';
   $('fTitolo').value = e ? e.titolo : '';
-  $('fClasse').value = e ? (e.classe || '') : '';
   $('fGiorno').value = e ? (e.giorno || '') : (giorno || '');
   $('fInizio').value = e ? ora(e.ora_inizio) : '';
   $('fFine').value = e ? ora(e.ora_fine) : '';
@@ -246,7 +240,7 @@ function cardHTML(e){
     : 'Tutto il giorno';
   return `<div class="ev ${e.fatto ? 'fatto' : ''} ${selezionata === e.id ? 'sel' : ''}" draggable="true"
       style="background:${colore(e.categoria)}" data-id="${e.id}">
-    <span class="ttl">${esc(e.titolo)}${e.classe ? ' · ' + esc(e.classe) : ''}<small>${orario}</small></span></div>`;
+    <span class="ttl">${esc(e.titolo)}<small>${orario}</small></span></div>`;
 }
 
 function disegnaBozze(){
@@ -255,7 +249,7 @@ function disegnaBozze(){
     ? bozze.map(e => `
         <div class="ev ${selezionata === e.id ? 'sel' : ''}" draggable="true"
              style="background:${colore(e.categoria)}" data-id="${e.id}">
-          <span class="ttl">${esc(e.titolo)}${e.classe ? ' · ' + esc(e.classe) : ''}</span>
+          <span class="ttl">${esc(e.titolo)}</span>
           <button class="mod" data-mod="${e.id}" title="Modifica">✎</button>
         </div>`).join('')
     : '<div class="vuoto">Nessuna attività da programmare</div>';
@@ -331,18 +325,15 @@ $('nuovo').onclick = () => apriForm(null);
 
 // ---- clic sul calendario ----
 $('cal').addEventListener('click', ev => {
-  // clic su un'attività: la apre per modificarla
   const card = ev.target.closest('[data-id]');
   if (card){ apriForm(eventi.find(x => x.id === card.dataset.id)); return; }
-  // attività scelta dalla lista (telefono): clic sul giorno la sposta lì
   const zona = ev.target.closest('[data-drop]');
   if (selezionata && zona){ sposta(selezionata, zona.dataset.drop); return; }
-  // clic sul nome del giorno: nuova attività per quel giorno
   const nuovo = ev.target.closest('[data-nuovo]');
   if (nuovo) apriForm(null, nuovo.dataset.nuovo);
 });
 
-// ---- lista da programmare ----
+// ---- lista attività ----
 $('listaBozze').addEventListener('click', ev => {
   const mod = ev.target.closest('[data-mod]');
   if (mod){ apriForm(eventi.find(x => x.id === mod.dataset.mod)); return; }
