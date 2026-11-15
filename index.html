@@ -444,7 +444,6 @@ input[type=color]{width:44px;height:34px;padding:2px}
 .num{font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;align-self:flex-start;padding:0 3px}
 .cella .ev{font-size:11px;padding:3px 4px}
 #stato{min-height:1.4em;color:var(--muted);font-size:13px}
-@media (max-width:700px){.giorni{grid-template-columns:1fr}.giorno{min-height:0}}
 dialog{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:14px;padding:16px;max-width:400px;width:92%}
 dialog::backdrop{background:rgba(0,0,0,.35)}
 dialog form{display:grid;gap:8px}
@@ -476,6 +475,17 @@ h2.sezLink{border-top:1px solid var(--line)}
 #fAllegati{display:grid;gap:2px}
 .allegato{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--line)}
 .allegato a{color:var(--accent);word-break:break-all}
+
+/* ---- vista telefono: 7 giorni scorrevoli in orizzontale, oppure 1 giorno ---- */
+#cal{min-width:0}
+#numGiorni{display:none}
+@media (max-width:700px){
+  #numGiorni{display:inline-block}
+  .giorni{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:8px;padding-bottom:6px;-webkit-overflow-scrolling:touch}
+  .giorno{flex:0 0 44vw;min-height:0;scroll-snap-align:start}
+  .giorni.uno .giorno{flex:0 0 100%}
+  .giorno .lista{min-height:260px}
+}
 </style>
 </head>
 <body>
@@ -490,6 +500,7 @@ h2.sezLink{border-top:1px solid var(--line)}
     <button id="vistaGiorno" aria-pressed="false">Giorno</button>
     <button id="vistaSett" aria-pressed="true">Settimana</button>
     <button id="vistaMese" aria-pressed="false">Mese</button>
+    <button id="numGiorni" aria-pressed="false">1 giorno</button>
     <button id="impost" aria-label="Impostazioni" title="Impostazioni">⚙</button>
   </div>
   <div class="legenda" id="legenda"></div>
@@ -620,6 +631,7 @@ let selezionata = null;    // attività scelta dalla lista con il tocco (telefon
 let seminate = false;
 let links = [];           // {id, titolo, url}
 let giornoVista = new Date();
+let mobGiorni = 7;        // sul telefono: 7 giorni (scorrevoli) oppure 1 giorno
 const ORA_INI = 8, ORA_FINE = 18, PX_ORA = 56;   // fascia oraria della vista Giorno
 let fileDaCaricare = [];
 const GIORNI_LUNGHI = ['lunedì','martedì','mercoledì','giovedì','venerdì','sabato','domenica'];
@@ -950,9 +962,22 @@ function disegnaBozze(){
 }
 
 function disegnaSettimana(){
+  $('numGiorni').textContent = mobGiorni === 7 ? '1 giorno' : '7 giorni';
+  const oggi = iso(new Date());
+
+  if (mobGiorni === 1){
+    const d = giornoVista, k = iso(d);
+    $('periodo').textContent = GIORNI_LUNGHI[(d.getDay()+6)%7] + ' ' + d.getDate() + ' ' + MESI[d.getMonth()] + ' ' + d.getFullYear();
+    $('cal').innerHTML = `<div class="giorni uno">
+      <div class="giorno ${k === oggi ? 'oggi' : ''}" data-drop="${k}">
+        <button class="testa" data-nuovo="${k}">${GIORNI[(d.getDay()+6)%7]} ${d.getDate()}</button>
+        <div class="lista">${eventiDelGiorno(d).map(cardHTML).join('')}</div>
+      </div></div>`;
+    return;
+  }
+
   const fine = aggiungi(inizioSett, 6);
   $('periodo').textContent = `${inizioSett.getDate()} ${MESI[inizioSett.getMonth()]} – ${fine.getDate()} ${MESI[fine.getMonth()]} ${fine.getFullYear()}`;
-  const oggi = iso(new Date());
   let html = '<div class="giorni">';
   for (let i = 0; i < 7; i++){
     const d = aggiungi(inizioSett, i);
@@ -1050,13 +1075,13 @@ function setVista(v){
 }
 
 $('prev').onclick = () => {
-  if (vista === 'giorno') giornoVista = aggiungi(giornoVista, -1);
+  if (vista === 'giorno' || (vista === 'settimana' && mobGiorni === 1)) giornoVista = aggiungi(giornoVista, -1);
   else if (vista === 'settimana') inizioSett = aggiungi(inizioSett, -7);
   else mese = new Date(mese.getFullYear(), mese.getMonth() - 1, 1);
   disegna();
 };
 $('next').onclick = () => {
-  if (vista === 'giorno') giornoVista = aggiungi(giornoVista, 1);
+  if (vista === 'giorno' || (vista === 'settimana' && mobGiorni === 1)) giornoVista = aggiungi(giornoVista, 1);
   else if (vista === 'settimana') inizioSett = aggiungi(inizioSett, 7);
   else mese = new Date(mese.getFullYear(), mese.getMonth() + 1, 1);
   disegna();
@@ -1071,6 +1096,20 @@ $('oggi').onclick = () => {
 $('vistaSett').onclick = () => setVista('settimana');
 $('vistaMese').onclick = () => setVista('mese');
 $('vistaGiorno').onclick = () => setVista('giorno');
+$('numGiorni').onclick = () => {
+  const t = new Date();
+  if (mobGiorni === 7){
+    // passa a 1 giorno: oggi se è nella settimana mostrata, altrimenti il lunedì
+    const dentro = t >= inizioSett && t < aggiungi(inizioSett, 7);
+    giornoVista = dentro ? t : new Date(inizioSett);
+    mobGiorni = 1;
+  } else {
+    // torna a 7 giorni: la settimana del giorno mostrato
+    inizioSett = lunedi(giornoVista);
+    mobGiorni = 7;
+  }
+  setVista('settimana');
+};
 $('impost').onclick = apriImpostazioni;
 
 // ---- clic sul calendario ----
