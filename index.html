@@ -712,7 +712,13 @@ async function carica(){
       if (ins.error) throw new Error('categorie: ' + ins.error.message);
       return carica();
     }
-    categorie = c.data;
+    // se una categoria risulta doppia nel database, tiene la prima e cancella le copie
+    const visti = new Set(), doppie = [];
+    categorie = c.data.filter(x => {
+      if (visti.has(x.nome)){ doppie.push(x.id); return false; }
+      visti.add(x.nome); return true;
+    });
+    if (doppie.length) await sb.from('categorie').delete().in('id', doppie);
     const e = await sb.from('eventi').select('*').order('giorno').order('ora_inizio', {nullsFirst: true});
     if (e.error) throw new Error('attività: ' + e.error.message);
     eventi = e.data;
