@@ -460,6 +460,9 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
 .sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);padding:0}
 .colgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px}
 .colgrid label{font-size:12px}
+h2.sezLink{border-top:1px solid var(--line)}
+.listaLink{display:flex;flex-direction:column;gap:6px;padding:10px}
+.linkrow a{color:var(--accent);word-break:break-all;font-weight:600}
 </style>
 </head>
 <body>
@@ -488,6 +491,14 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
         <button type="button" id="rAdd" class="primary">Aggiungi alla lista</button>
       </form>
       <div id="listaBozze" data-drop="bozze"></div>
+      <h2 class="sezLink">Link salvati</h2>
+      <p class="nota">Scrivi un link una volta sola. Poi trascinalo su un giorno, oppure premi ＋ per metterlo nella lista Attività.</p>
+      <form class="rapida" onsubmit="return false">
+        <input id="lTitolo" placeholder="Nome, es. Registro elettronico">
+        <input id="lUrl" type="url" placeholder="Indirizzo, es. https://...">
+        <button type="button" id="lSalva" class="primary">Salva link</button>
+      </form>
+      <div id="listaLink" class="listaLink"></div>
     </aside>
   </div>
 
@@ -504,6 +515,7 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
       <label>Dalle <input id="fInizio" type="time"></label>
       <label>Alle <input id="fFine" type="time"></label>
     </div>
+    <label>Link salvato <select id="fLinkSel"></select></label>
     <label>Link (facoltativo) <input id="fLink" placeholder="https://..."></label>
     <label>Categoria <select id="fCat"></select></label>
     <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="fFatto" style="width:auto"> Fatto</label>
@@ -588,6 +600,7 @@ let mese = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let modifica = null;
 let selezionata = null;    // attività scelta dalla lista con il tocco (telefono)
 let seminate = false;
+let links = [];           // {id, titolo, url}
 
 // ---- utilità ----
 const $ = id => document.getElementById(id);
@@ -622,7 +635,16 @@ async function carica(){
     $('stato').textContent = 'Errore: ' + err.message + '. Controlla di aver eseguito tutto il codice SQL su Supabase.';
     if (!categorie.length) categorie = CATEGORIE_INIZIALI.map((x, i) => ({id: 'tmp' + i, nome: x.nome, colore: x.colore, posizione: i}));
   }
+  try {
+    const l = await sb.from('links').select('*').order('titolo');
+    if (l.error) throw new Error(l.error.message);
+    links = l.data;
+  } catch (err) {
+    links = [];
+    $('stato').textContent = 'Link non disponibili: esegui il codice SQL dei link su Supabase.';
+  }
   aggiornaSelezioniCategoria();
+  aggiornaLinkSel();
   if ($('setDlg').open) disegnaImpostazioni();
   disegna();
 }
@@ -743,6 +765,59 @@ async function creaCategoria(){
   carica();
 }
 
+// ---- link salvati ----
+function disegnaLink(){
+  $('listaLink').innerHTML = links.length
+    ? links.map(l => `
+        <div class="ev linkrow" draggable="true" data-link-id="${l.id}" style="background:var(--panel)">
+          <span class="ttl"><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.titolo)}</a></span>
+          <button type="button" class="mod" data-link-add="${l.id}" title="Aggiungi alla lista Attività">＋</button>
+          <button type="button" class="mod" data-link-del="${l.id}" title="Elimina link">✕</button>
+        </div>`).join('')
+    : '<div class="vuoto">Nessun link salvato</div>';
+}
+
+function aggiornaLinkSel(){
+  const attuale = $('fLinkSel').value;
+  $('fLinkSel').innerHTML = '<option value="">— nessuno —</option>' +
+    links.map(l => `<option value="${l.id}">${esc(l.titolo)}</option>`).join('');
+  $('fLinkSel').value = attuale;
+}
+
+async function salvaLink(){
+  const titolo = $('lTitolo').value.trim();
+  const url = normUrl($('lUrl').value);
+  if (!titolo || !url){ alert('Scrivi il nome e l’indirizzo del link.'); return; }
+  const { error } = await sb.from('links').insert({ titolo, url });
+  if (error){ alert('Link non salvato: ' + error.message); return; }
+  $('lTitolo').value = '';
+  $('lUrl').value = '';
+  carica();
+}
+
+async function eliminaLink(id){
+  const l = links.find(x => x.id === id);
+  if (!l || !confirm(`Eliminare il link “${l.titolo}”? Le attività già create restano.`)) return;
+  const { error } = await sb.from('links').delete().eq('id', id);
+  if (error){ alert('Eliminazione non riuscita: ' + error.message); return; }
+  carica();
+}
+
+// crea un'attività con il link: nella lista (giorno null) oppure in un giorno
+async function creaAttivitaDaLink(id, giorno){
+  const l = links.find(x => x.id === id);
+  if (!l) return;
+  const { error } = await sb.from('eventi').insert({
+    titolo: l.titolo,
+    link: l.url,
+    giorno,
+    categoria: categorie[0] ? categorie[0].nome : 'Altro',
+    fatto: false
+  });
+  if (error){ alert('Non aggiunto: ' + error.message); return; }
+  carica();
+}
+
 // ---- finestra attività ----
 function apriForm(e, giorno){
   modifica = e || null;
@@ -753,6 +828,7 @@ function apriForm(e, giorno){
   $('fFine').value = e ? ora(e.ora_fine) : '';
   $('fCat').value = e && categorie.some(c => c.nome === e.categoria) ? e.categoria : (categorie[0] ? categorie[0].nome : '');
   $('fLink').value = e ? (e.link || '') : '';
+  $('fLinkSel').value = '';
   $('fFatto').checked = e ? !!e.fatto : false;
   $('elimina').style.display = e ? '' : 'none';
   $('dlg').showModal();
@@ -825,6 +901,7 @@ function disegna(){
   $('legenda').innerHTML = categorie.map(c =>
     `<span><i class="pallino" style="background:${c.colore}"></i>${esc(c.nome)}</span>`).join('');
   disegnaBozze();
+  disegnaLink();
   if (vista === 'settimana') disegnaSettimana(); else disegnaMese();
 }
 
@@ -886,6 +963,12 @@ document.addEventListener('dragstart', ev => {
   ev.dataTransfer.setData('text/plain', el.dataset.id);
   ev.dataTransfer.effectAllowed = 'move';
 });
+document.addEventListener('dragstart', ev => {
+  const l = ev.target.closest('[data-link-id][draggable="true"]');
+  if (!l) return;
+  ev.dataTransfer.setData('text/plain', 'link:' + l.dataset.linkId);
+  ev.dataTransfer.effectAllowed = 'copyMove';
+});
 document.addEventListener('dragover', ev => {
   const z = ev.target.closest('[data-drop]');
   if (!z) return;
@@ -904,6 +987,7 @@ document.addEventListener('drop', ev => {
   const id = ev.dataTransfer.getData('text/plain');
   if (!id) return;
   const giorno = z.dataset.drop === 'bozze' ? null : z.dataset.drop;
+  if (id.startsWith('link:')){ creaAttivitaDaLink(id.slice(5), giorno); return; }
   sposta(id, giorno);
 });
 document.addEventListener('dragend', () => {
@@ -912,6 +996,20 @@ document.addEventListener('dragend', () => {
 
 // ---- finestre e lista rapida ----
 $('salva').onclick = salva;
+$('lSalva').onclick = salvaLink;
+$('lUrl').addEventListener('keydown', e => { if (e.key === 'Enter') salvaLink(); });
+$('listaLink').addEventListener('click', e => {
+  const add = e.target.closest('[data-link-add]');
+  if (add){ creaAttivitaDaLink(add.dataset.linkAdd, null); return; }
+  const del = e.target.closest('[data-link-del]');
+  if (del) eliminaLink(del.dataset.linkDel);
+});
+$('fLinkSel').addEventListener('change', () => {
+  const l = links.find(x => x.id === $('fLinkSel').value);
+  if (!l) return;
+  $('fLink').value = l.url;
+  if (!$('fTitolo').value.trim()) $('fTitolo').value = l.titolo;
+});
 $('elimina').onclick = elimina;
 $('annulla').onclick = () => $('dlg').close();
 $('rAdd').onclick = aggiungiAllaLista;
@@ -1043,6 +1141,7 @@ carica();
 sb.channel('calendario')
   .on('postgres_changes', {event: '*', schema: 'public', table: 'eventi'}, carica)
   .on('postgres_changes', {event: '*', schema: 'public', table: 'categorie'}, carica)
+  .on('postgres_changes', {event: '*', schema: 'public', table: 'links'}, carica)
   .subscribe();
 </script>
 </body>
