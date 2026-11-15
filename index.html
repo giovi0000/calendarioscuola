@@ -8,7 +8,7 @@
 :root{--bg:#f4f8f6;--panel:#fff;--fg:#2d3a34;--muted:#748279;--line:#d6e4dc;--accent:#2f7a5b;--soft:#e6f2ec}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;padding:12px}
-.wrap{max-width:1100px;margin:0 auto;display:grid;gap:12px}
+.wrap{max-width:1300px;margin:0 auto;display:grid;gap:12px}
 .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px}
 .spacer{flex:1}
 h1{font-size:18px;margin:0}
@@ -19,15 +19,35 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
 .legenda{display:flex;gap:12px;flex-wrap:wrap;font-size:12px}
 .pallino{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
+
+/* layout: pannello a sinistra, calendario a destra */
+.layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:12px;align-items:start}
+@media(max-width:800px){.layout{grid-template-columns:1fr}.pannello{position:static!important}}
+.pannello{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px;position:sticky;top:12px}
+.pannello h2{font-size:15px;margin:0}
+.nota{font-size:12px;color:var(--muted);margin:0}
+.rapida{display:grid;gap:6px}
+.rapida input,.rapida select{width:100%}
+#listaBozze{display:flex;flex-direction:column;gap:5px;min-height:80px;border-radius:8px}
+
+/* attività */
+.ev{background:var(--soft);border-left:4px solid var(--accent);border-radius:6px;padding:5px 6px;font-size:12.5px;width:100%;color:var(--fg);overflow-wrap:anywhere;cursor:grab;user-select:none;display:flex;align-items:flex-start;gap:4px}
+.ev.fatto{opacity:.5;text-decoration:line-through}
+.ev.sel{box-shadow:0 0 0 2px var(--accent)}
+.ev .ttl{flex:1;min-width:0}
+.ev small{display:block;color:var(--muted);font-size:11px}
+.ev .mod{padding:0 5px;font-size:12px;border:0;background:none;line-height:1.4}
+.drop-over{outline:2px dashed var(--accent);outline-offset:2px}
+.vuoto{color:var(--muted);font-size:12px;text-align:center;padding:10px 0}
+
+/* settimana */
 .giorni{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
 .giorno{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-height:260px;display:flex;flex-direction:column;min-width:0}
 .giorno.oggi{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .testa{border:0;border-radius:10px 10px 0 0;background:var(--soft);color:var(--accent);font-weight:600;font-size:12px;padding:8px}
-.lista{padding:6px;display:flex;flex-direction:column;gap:5px}
-.ev{border:0;border-left:4px solid var(--accent);border-radius:6px;padding:5px 6px;font-size:12.5px;text-align:left;width:100%;color:var(--fg);overflow-wrap:anywhere}
-.ev.fatto{opacity:.5;text-decoration:line-through}
-.ev small{display:block;color:var(--muted);font-size:11px}
-.vuoto{color:var(--muted);font-size:12px;text-align:center;padding:10px 0}
+.lista{padding:6px;display:flex;flex-direction:column;gap:5px;flex:1}
+
+/* mese */
 .mese{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
 .intest{font-size:12px;color:var(--accent);font-weight:600;text-align:center;padding:4px}
 .cella{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-height:90px;padding:4px;display:flex;flex-direction:column;gap:3px;min-width:0}
@@ -35,7 +55,11 @@ button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);
 .cella.oggi{border-color:var(--accent)}
 .num{font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;align-self:flex-start;padding:0 3px}
 .cella .ev{font-size:11px;padding:3px 4px}
+
 #stato{color:var(--muted);font-size:13px;min-height:1.4em}
+@media(max-width:700px){.giorni{grid-template-columns:1fr}.giorno{min-height:0}}
+
+/* finestra di modifica */
 dialog{border:1px solid var(--line);border-radius:12px;padding:16px;max-width:380px;width:90%;background:var(--panel);color:var(--fg)}
 dialog::backdrop{background:rgba(0,0,0,.3)}
 dialog form{display:grid;gap:8px}
@@ -43,7 +67,6 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
 .riga{display:flex;gap:8px}
 .riga>label{flex:1;min-width:0}
 .azioni{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px}
-@media(max-width:700px){.giorni{grid-template-columns:1fr}.giorno{min-height:0}}
 </style>
 </head>
 <body>
@@ -60,7 +83,22 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
     <button id="nuovo" class="primary">+ Attività</button>
   </div>
   <div class="legenda" id="legenda"></div>
-  <div id="cal"></div>
+
+  <div class="layout">
+    <aside class="pannello" id="pannelloBozze">
+      <h2>Da programmare</h2>
+      <p class="nota">Trascina un’attività in un giorno. Su telefono: tocca l’attività, poi tocca il giorno.</p>
+      <form class="rapida" onsubmit="return false">
+        <input id="rTitolo" placeholder="Nuova attività">
+        <input id="rClasse" placeholder="Classe (facoltativa)">
+        <select id="rCat"></select>
+        <button type="button" id="rAdd" class="primary">Aggiungi alla lista</button>
+      </form>
+      <div id="listaBozze" data-drop="bozze"></div>
+    </aside>
+    <div id="cal"></div>
+  </div>
+
   <div id="stato"></div>
 </div>
 
@@ -69,7 +107,7 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
     <h3 id="dlgTitolo" style="margin:0;font-size:16px">Nuova attività</h3>
     <label>Attività <input id="fTitolo"></label>
     <label>Classe <input id="fClasse" placeholder="es. 3ª A"></label>
-    <label>Giorno <input id="fGiorno" type="date"></label>
+    <label>Giorno (vuoto = da programmare) <input id="fGiorno" type="date"></label>
     <div class="riga">
       <label>Dalle <input id="fInizio" type="time"></label>
       <label>Alle <input id="fFine" type="time"></label>
@@ -109,6 +147,7 @@ let vista = 'settimana';
 let inizioSett = lunedi(new Date());
 let mese = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let modifica = null;
+let selezionata = null;   // attività della lista scelta da tocco (per telefono)
 
 // ---- utilità ----
 const $ = id => document.getElementById(id);
@@ -131,13 +170,13 @@ async function carica(){
 
 async function salva(){
   const titolo = $('fTitolo').value.trim();
-  const giorno = $('fGiorno').value;
-  if (!titolo || !giorno){ alert('Scrivi il nome dell’attività e il giorno.'); return; }
+  if (!titolo){ alert('Scrivi il nome dell’attività.'); return; }
   const inizio = $('fInizio').value || null;
   const fine = $('fFine').value || null;
   if (inizio && fine && fine <= inizio){ alert('L’orario di fine deve essere dopo quello di inizio.'); return; }
   const riga = {
-    titolo, giorno,
+    titolo,
+    giorno: $('fGiorno').value || null,   // vuoto = resta nella lista da programmare
     classe: $('fClasse').value.trim() || null,
     ora_inizio: inizio, ora_fine: fine,
     categoria: $('fCat').value,
@@ -159,13 +198,39 @@ async function elimina(){
   carica();
 }
 
-// ---- form ----
+async function aggiungiAllaLista(){
+  const titolo = $('rTitolo').value.trim();
+  if (!titolo){ stato('Scrivi il nome dell’attività.'); return; }
+  const { error } = await sb.from('eventi').insert({
+    titolo,
+    classe: $('rClasse').value.trim() || null,
+    categoria: $('rCat').value,
+    giorno: null,
+    fatto: false
+  });
+  if (error){ alert('Non salvato: ' + error.message); return; }
+  $('rTitolo').value = '';
+  $('rClasse').value = '';
+  carica();
+}
+
+// sposta un'attività in un altro giorno (o nella lista se giorno è null)
+async function sposta(id, giorno){
+  const e = eventi.find(x => x.id === id);
+  if (!e || e.giorno === giorno) { selezionata = null; disegna(); return; }
+  const { error } = await sb.from('eventi').update({ giorno }).eq('id', id);
+  if (error){ stato('Spostamento non riuscito: ' + error.message); return; }
+  selezionata = null;
+  carica();
+}
+
+// ---- finestra di modifica ----
 function apriForm(e, giorno){
   modifica = e || null;
   $('dlgTitolo').textContent = e ? 'Modifica attività' : 'Nuova attività';
   $('fTitolo').value = e ? e.titolo : '';
   $('fClasse').value = e ? (e.classe || '') : '';
-  $('fGiorno').value = e ? e.giorno : (giorno || iso(new Date()));
+  $('fGiorno').value = e ? (e.giorno || '') : (giorno || '');
   $('fInizio').value = e ? ora(e.ora_inizio) : '';
   $('fFine').value = e ? ora(e.ora_fine) : '';
   $('fCat').value = e ? e.categoria : CATEGORIE[0].nome;
@@ -179,8 +244,21 @@ function cardHTML(e){
   const orario = e.ora_inizio
     ? ora(e.ora_inizio) + (e.ora_fine ? '–' + ora(e.ora_fine) : '')
     : 'Tutto il giorno';
-  return `<button class="ev ${e.fatto ? 'fatto' : ''}" style="background:${colore(e.categoria)}" data-id="${e.id}">
-    ${esc(e.titolo)}${e.classe ? ' · ' + esc(e.classe) : ''}<small>${orario}</small></button>`;
+  return `<div class="ev ${e.fatto ? 'fatto' : ''} ${selezionata === e.id ? 'sel' : ''}" draggable="true"
+      style="background:${colore(e.categoria)}" data-id="${e.id}">
+    <span class="ttl">${esc(e.titolo)}${e.classe ? ' · ' + esc(e.classe) : ''}<small>${orario}</small></span></div>`;
+}
+
+function disegnaBozze(){
+  const bozze = eventi.filter(e => !e.giorno);
+  $('listaBozze').innerHTML = bozze.length
+    ? bozze.map(e => `
+        <div class="ev ${selezionata === e.id ? 'sel' : ''}" draggable="true"
+             style="background:${colore(e.categoria)}" data-id="${e.id}">
+          <span class="ttl">${esc(e.titolo)}${e.classe ? ' · ' + esc(e.classe) : ''}</span>
+          <button class="mod" data-mod="${e.id}" title="Modifica">✎</button>
+        </div>`).join('')
+    : '<div class="vuoto">Nessuna attività da programmare</div>';
 }
 
 function disegnaSettimana(){
@@ -191,9 +269,9 @@ function disegnaSettimana(){
   for (let i = 0; i < 7; i++){
     const d = aggiungi(inizioSett, i);
     const k = iso(d);
-    html += `<div class="giorno ${k === oggi ? 'oggi' : ''}">
+    html += `<div class="giorno ${k === oggi ? 'oggi' : ''}" data-drop="${k}">
       <button class="testa" data-nuovo="${k}">${GIORNI[i]} ${d.getDate()}</button>
-      <div class="lista">${eventiDelGiorno(d).map(cardHTML).join('') || '<div class="vuoto">—</div>'}</div>
+      <div class="lista">${eventiDelGiorno(d).map(cardHTML).join('')}</div>
     </div>`;
   }
   $('cal').innerHTML = html + '</div>';
@@ -208,7 +286,7 @@ function disegnaMese(){
   for (let i = 0; i < 42; i++){
     const d = aggiungi(partenza, i);
     const k = iso(d);
-    html += `<div class="cella ${d.getMonth() !== m ? 'fuori' : ''} ${k === oggi ? 'oggi' : ''}">
+    html += `<div class="cella ${d.getMonth() !== m ? 'fuori' : ''} ${k === oggi ? 'oggi' : ''}" data-drop="${k}">
       <span class="num" data-nuovo="${k}">${d.getDate()}</span>
       ${eventiDelGiorno(d).map(cardHTML).join('')}
     </div>`;
@@ -219,6 +297,7 @@ function disegnaMese(){
 function disegna(){
   $('legenda').innerHTML = CATEGORIE.map(c =>
     `<span><i class="pallino" style="background:${c.colore}"></i>${esc(c.nome)}</span>`).join('');
+  disegnaBozze();
   if (vista === 'settimana') disegnaSettimana(); else disegnaMese();
 }
 
@@ -250,18 +329,69 @@ $('vistaSett').onclick = () => setVista('settimana');
 $('vistaMese').onclick = () => setVista('mese');
 $('nuovo').onclick = () => apriForm(null);
 
+// ---- clic sul calendario ----
 $('cal').addEventListener('click', ev => {
+  // clic su un'attività: la apre per modificarla
   const card = ev.target.closest('[data-id]');
   if (card){ apriForm(eventi.find(x => x.id === card.dataset.id)); return; }
+  // attività scelta dalla lista (telefono): clic sul giorno la sposta lì
+  const zona = ev.target.closest('[data-drop]');
+  if (selezionata && zona){ sposta(selezionata, zona.dataset.drop); return; }
+  // clic sul nome del giorno: nuova attività per quel giorno
   const nuovo = ev.target.closest('[data-nuovo]');
   if (nuovo) apriForm(null, nuovo.dataset.nuovo);
 });
 
-// ---- dialog ----
+// ---- lista da programmare ----
+$('listaBozze').addEventListener('click', ev => {
+  const mod = ev.target.closest('[data-mod]');
+  if (mod){ apriForm(eventi.find(x => x.id === mod.dataset.mod)); return; }
+  const item = ev.target.closest('[data-id]');
+  if (item){
+    selezionata = selezionata === item.dataset.id ? null : item.dataset.id;
+    disegna();
+  }
+});
+
+// ---- trascinamento (computer) ----
+document.addEventListener('dragstart', ev => {
+  const el = ev.target.closest('[data-id][draggable="true"]');
+  if (!el) return;
+  ev.dataTransfer.setData('text/plain', el.dataset.id);
+  ev.dataTransfer.effectAllowed = 'move';
+});
+document.addEventListener('dragover', ev => {
+  const z = ev.target.closest('[data-drop]');
+  if (!z) return;
+  ev.preventDefault();
+  z.classList.add('drop-over');
+});
+document.addEventListener('dragleave', ev => {
+  const z = ev.target.closest('[data-drop]');
+  if (z && !z.contains(ev.relatedTarget)) z.classList.remove('drop-over');
+});
+document.addEventListener('drop', ev => {
+  const z = ev.target.closest('[data-drop]');
+  if (!z) return;
+  ev.preventDefault();
+  document.querySelectorAll('.drop-over').forEach(n => n.classList.remove('drop-over'));
+  const id = ev.dataTransfer.getData('text/plain');
+  if (!id) return;
+  const giorno = z.dataset.drop === 'bozze' ? null : z.dataset.drop;
+  sposta(id, giorno);
+});
+document.addEventListener('dragend', () => {
+  document.querySelectorAll('.drop-over').forEach(n => n.classList.remove('drop-over'));
+});
+
+// ---- dialog e lista rapida ----
 $('fCat').innerHTML = CATEGORIE.map(c => `<option>${esc(c.nome)}</option>`).join('');
+$('rCat').innerHTML = $('fCat').innerHTML;
 $('salva').onclick = salva;
 $('elimina').onclick = elimina;
 $('annulla').onclick = () => $('dlg').close();
+$('rAdd').onclick = aggiungiAllaLista;
+$('rTitolo').addEventListener('keydown', e => { if (e.key === 'Enter') aggiungiAllaLista(); });
 
 // ---- avvio e aggiornamenti ----
 carica();
