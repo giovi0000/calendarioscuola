@@ -37,6 +37,7 @@ button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);
 .ev .ttl{flex:1;min-width:0}
 .ev small{display:block;color:var(--muted);font-size:11px}
 .ev .mod{padding:0 5px;font-size:12px;border:0;background:none;line-height:1.4}
+.ev .lk{text-decoration:none;font-size:13px;flex:0 0 auto;line-height:1.4}
 .drop-over{outline:2px dashed var(--accent);outline-offset:2px}
 .vuoto{color:var(--muted);font-size:12px;text-align:center;padding:10px 0}
 
@@ -59,14 +60,17 @@ button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);
 #stato{color:var(--muted);font-size:13px;min-height:1.4em}
 @media(max-width:700px){.giorni{grid-template-columns:1fr}.giorno{min-height:0}}
 
-/* finestra di modifica */
-dialog{border:1px solid var(--line);border-radius:12px;padding:16px;max-width:380px;width:90%;background:var(--panel);color:var(--fg)}
+/* finestre */
+dialog{border:1px solid var(--line);border-radius:12px;padding:16px;max-width:400px;width:92%;background:var(--panel);color:var(--fg)}
 dialog::backdrop{background:rgba(0,0,0,.3)}
 dialog form{display:grid;gap:8px}
 dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
 .riga{display:flex;gap:8px}
 .riga>label{flex:1;min-width:0}
 .azioni{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px}
+.catrow{display:flex;gap:6px;align-items:center}
+.catrow .cn{flex:1;min-width:0}
+.catrow input[type=color]{width:44px;padding:2px;flex:0 0 44px}
 </style>
 </head>
 <body>
@@ -80,7 +84,7 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
     <button id="oggi">Oggi</button>
     <button id="vistaSett" aria-pressed="true">Settimana</button>
     <button id="vistaMese" aria-pressed="false">Mese</button>
-    <button id="nuovo" class="primary">+ Attività</button>
+    <button id="impost" aria-label="Impostazioni" title="Impostazioni">⚙</button>
   </div>
   <div class="legenda" id="legenda"></div>
 
@@ -101,6 +105,7 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
   <div id="stato"></div>
 </div>
 
+<!-- finestra attività -->
 <dialog id="dlg">
   <form onsubmit="return false">
     <h3 id="dlgTitolo" style="margin:0;font-size:16px">Nuova attività</h3>
@@ -110,6 +115,7 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
       <label>Dalle <input id="fInizio" type="time"></label>
       <label>Alle <input id="fFine" type="time"></label>
     </div>
+    <label>Link (facoltativo) <input id="fLink" placeholder="https://..."></label>
     <label>Categoria <select id="fCat"></select></label>
     <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="fFatto" style="width:auto"> Fatto</label>
     <div class="azioni">
@@ -120,6 +126,22 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
   </form>
 </dialog>
 
+<!-- finestra impostazioni -->
+<dialog id="setDlg">
+  <div style="display:grid;gap:10px">
+    <h3 style="margin:0;font-size:16px">Impostazioni</h3>
+    <div style="font-weight:600;font-size:13px">Categorie</div>
+    <div class="note" style="font-size:12px;color:var(--muted)">Cambia nome o colore: vale per tutte le attività. Per eliminare una categoria, prima cambia la categoria delle attività che la usano.</div>
+    <div id="listaCat" style="display:grid;gap:6px"></div>
+    <div class="riga" style="align-items:center">
+      <input id="nuovaCatNome" placeholder="Nuova categoria" maxlength="60" style="flex:1;min-width:0">
+      <input id="nuovaCatCol" type="color" value="#cfe8f7" style="width:44px;padding:2px">
+      <button type="button" id="nuovaCatAdd" class="primary">Crea</button>
+    </div>
+    <div class="azioni"><button type="button" id="setChiudi">Chiudi</button></div>
+  </div>
+</dialog>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 // ---- configurazione Supabase ----
@@ -127,8 +149,8 @@ const SUPABASE_URL = 'https://jdtrxqstvtrgeyvyxefl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_y8Kig7DEzF32JUD_GW4Ijw_Lt4ybv9W';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// categorie: puoi cambiare nomi e colori qui
-const CATEGORIE = [
+// categorie di partenza: vengono salvate su Supabase la prima volta
+const CATEGORIE_INIZIALI = [
   {nome:'Lezione', colore:'#cfe8f7'},
   {nome:'Compiti', colore:'#fde7c8'},
   {nome:'Uscita', colore:'#d8f0d4'},
@@ -140,12 +162,14 @@ const GIORNI = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
 const MESI = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
 
 // ---- stato ----
+let categorie = [];        // {id, nome, colore, posizione}
 let eventi = [];
 let vista = 'settimana';
 let inizioSett = lunedi(new Date());
 let mese = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let modifica = null;
-let selezionata = null;   // attività scelta dalla lista con il tocco (telefono)
+let selezionata = null;    // attività scelta dalla lista con il tocco (telefono)
+let seminate = false;
 
 // ---- utilità ----
 const $ = id => document.getElementById(id);
@@ -154,15 +178,32 @@ function lunedi(d){ const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(
 function aggiungi(d, n){ const x = new Date(d); x.setDate(x.getDate()+n); return x; }
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function ora(t){ return t ? t.slice(0,5) : ''; }
-function colore(nome){ return (CATEGORIE.find(c => c.nome === nome) || CATEGORIE[CATEGORIE.length-1]).colore; }
+function normUrl(s){ const v = (s || '').trim(); if (!v) return null; return /^https?:\/\//i.test(v) ? v : 'https://' + v; }
+function linkHTML(e){ return e.link ? `<a class="lk" href="${esc(e.link)}" target="_blank" rel="noopener" title="Apri il link">🔗</a>` : ''; }
+function colore(nome){ const c = categorie.find(x => x.nome === nome); return c ? c.colore : '#eeeeee'; }
 function stato(msg){ $('stato').textContent = msg; setTimeout(() => { if ($('stato').textContent === msg) $('stato').textContent = ''; }, 4000); }
 function eventiDelGiorno(d){ const k = iso(d); return eventi.filter(e => e.giorno === k); }
 
 // ---- database ----
 async function carica(){
-  const { data, error } = await sb.from('eventi').select('*').order('giorno').order('ora_inizio', {nullsFirst: true});
-  if (error){ stato('Errore di caricamento: ' + error.message); return; }
-  eventi = data;
+  const c = await sb.from('categorie').select('*').order('posizione').order('nome');
+  if (c.error){ stato('Errore categorie: ' + c.error.message); return; }
+
+  // prima volta: salva le categorie di partenza
+  if (c.data.length === 0 && !seminate){
+    seminate = true;
+    const ins = await sb.from('categorie').insert(CATEGORIE_INIZIALI.map((x, i) => ({...x, posizione: i})));
+    if (ins.error){ stato('Errore categorie: ' + ins.error.message); return; }
+    return carica();
+  }
+  categorie = c.data;
+
+  const e = await sb.from('eventi').select('*').order('giorno').order('ora_inizio', {nullsFirst: true});
+  if (e.error){ stato('Errore di caricamento: ' + e.error.message); return; }
+  eventi = e.data;
+
+  aggiornaSelezioniCategoria();
+  if ($('setDlg').open) disegnaImpostazioni();
   disegna();
 }
 
@@ -176,6 +217,7 @@ async function salva(){
     titolo,
     giorno: $('fGiorno').value || null,
     ora_inizio: inizio, ora_fine: fine,
+    link: normUrl($('fLink').value),
     categoria: $('fCat').value,
     fatto: $('fFatto').checked
   };
@@ -219,7 +261,68 @@ async function sposta(id, giorno){
   carica();
 }
 
-// ---- finestra di modifica ----
+// ---- impostazioni categorie ----
+function disegnaImpostazioni(){
+  $('listaCat').innerHTML = categorie.length
+    ? categorie.map(c => `
+        <div class="catrow" data-cat-id="${c.id}">
+          <input type="color" value="${c.colore}" data-act="colore" title="Colore">
+          <input class="cn" value="${esc(c.nome)}" maxlength="60" data-act="nome">
+          <button type="button" data-act="del" title="Elimina categoria">✕</button>
+        </div>`).join('')
+    : '<div class="vuoto">Nessuna categoria</div>';
+}
+
+function apriImpostazioni(){
+  disegnaImpostazioni();
+  $('setDlg').showModal();
+}
+
+async function modificaCategoria(id, campo, valore){
+  const cat = categorie.find(c => c.id === id);
+  if (!cat) return;
+  if (campo === 'colore'){
+    const { error } = await sb.from('categorie').update({ colore: valore }).eq('id', id);
+    if (error) alert('Colore non salvato: ' + error.message);
+  } else {
+    const nuovo = valore.trim();
+    if (!nuovo || nuovo === cat.nome) return carica();
+    if (categorie.some(c => c.nome === nuovo)){ alert('Esiste già una categoria con questo nome.'); return carica(); }
+    const { error } = await sb.from('categorie').update({ nome: nuovo }).eq('id', id);
+    if (error){ alert('Nome non salvato: ' + error.message); return carica(); }
+    // le attività che usavano il vecchio nome passano al nuovo
+    await sb.from('eventi').update({ categoria: nuovo }).eq('categoria', cat.nome);
+  }
+  carica();
+}
+
+async function eliminaCategoria(id){
+  const cat = categorie.find(c => c.id === id);
+  if (!cat) return;
+  const usate = eventi.filter(e => e.categoria === cat.nome).length;
+  if (usate > 0){
+    alert(`“${cat.nome}” è usata da ${usate} attività. Cambia prima la categoria di quelle attività.`);
+    return;
+  }
+  if (!confirm(`Eliminare la categoria “${cat.nome}”?`)) return;
+  const { error } = await sb.from('categorie').delete().eq('id', id);
+  if (error) alert('Eliminazione non riuscita: ' + error.message);
+  carica();
+}
+
+async function creaCategoria(){
+  const nome = $('nuovaCatNome').value.trim();
+  if (!nome){ stato('Scrivi il nome della categoria.'); return; }
+  if (categorie.some(c => c.nome === nome)){ alert('Esiste già una categoria con questo nome.'); return; }
+  const { error } = await sb.from('categorie').insert({
+    nome, colore: $('nuovaCatCol').value, posizione: categorie.length + 1
+  });
+  if (error){ alert('Non creata: ' + error.message); return; }
+  $('nuovaCatNome').value = '';
+  carica();
+}
+
+// ---- finestra attività ----
 function apriForm(e, giorno){
   modifica = e || null;
   $('dlgTitolo').textContent = e ? 'Modifica attività' : 'Nuova attività';
@@ -227,10 +330,19 @@ function apriForm(e, giorno){
   $('fGiorno').value = e ? (e.giorno || '') : (giorno || '');
   $('fInizio').value = e ? ora(e.ora_inizio) : '';
   $('fFine').value = e ? ora(e.ora_fine) : '';
-  $('fCat').value = e ? e.categoria : CATEGORIE[0].nome;
+  $('fCat').value = e && categorie.some(c => c.nome === e.categoria) ? e.categoria : (categorie[0] ? categorie[0].nome : '');
+  $('fLink').value = e ? (e.link || '') : '';
   $('fFatto').checked = e ? !!e.fatto : false;
   $('elimina').style.display = e ? '' : 'none';
   $('dlg').showModal();
+}
+
+function aggiornaSelezioniCategoria(){
+  const opzioni = categorie.map(c => `<option>${esc(c.nome)}</option>`).join('');
+  const attuale = $('rCat').value;
+  $('fCat').innerHTML = opzioni;
+  $('rCat').innerHTML = opzioni;
+  if (attuale) $('rCat').value = attuale;
 }
 
 // ---- disegno ----
@@ -240,7 +352,7 @@ function cardHTML(e){
     : 'Tutto il giorno';
   return `<div class="ev ${e.fatto ? 'fatto' : ''} ${selezionata === e.id ? 'sel' : ''}" draggable="true"
       style="background:${colore(e.categoria)}" data-id="${e.id}">
-    <span class="ttl">${esc(e.titolo)}<small>${orario}</small></span></div>`;
+    <span class="ttl">${esc(e.titolo)}<small>${orario}</small></span>${linkHTML(e)}</div>`;
 }
 
 function disegnaBozze(){
@@ -249,7 +361,7 @@ function disegnaBozze(){
     ? bozze.map(e => `
         <div class="ev ${selezionata === e.id ? 'sel' : ''}" draggable="true"
              style="background:${colore(e.categoria)}" data-id="${e.id}">
-          <span class="ttl">${esc(e.titolo)}</span>
+          <span class="ttl">${esc(e.titolo)}</span>${linkHTML(e)}
           <button class="mod" data-mod="${e.id}" title="Modifica">✎</button>
         </div>`).join('')
     : '<div class="vuoto">Nessuna attività da programmare</div>';
@@ -289,7 +401,7 @@ function disegnaMese(){
 }
 
 function disegna(){
-  $('legenda').innerHTML = CATEGORIE.map(c =>
+  $('legenda').innerHTML = categorie.map(c =>
     `<span><i class="pallino" style="background:${c.colore}"></i>${esc(c.nome)}</span>`).join('');
   disegnaBozze();
   if (vista === 'settimana') disegnaSettimana(); else disegnaMese();
@@ -321,10 +433,11 @@ $('oggi').onclick = () => {
 };
 $('vistaSett').onclick = () => setVista('settimana');
 $('vistaMese').onclick = () => setVista('mese');
-$('nuovo').onclick = () => apriForm(null);
+$('impost').onclick = apriImpostazioni;
 
 // ---- clic sul calendario ----
 $('cal').addEventListener('click', ev => {
+  if (ev.target.closest('a')) return;
   const card = ev.target.closest('[data-id]');
   if (card){ apriForm(eventi.find(x => x.id === card.dataset.id)); return; }
   const zona = ev.target.closest('[data-drop]');
@@ -335,6 +448,7 @@ $('cal').addEventListener('click', ev => {
 
 // ---- lista attività ----
 $('listaBozze').addEventListener('click', ev => {
+  if (ev.target.closest('a')) return;
   const mod = ev.target.closest('[data-mod]');
   if (mod){ apriForm(eventi.find(x => x.id === mod.dataset.mod)); return; }
   const item = ev.target.closest('[data-id]');
@@ -375,19 +489,32 @@ document.addEventListener('dragend', () => {
   document.querySelectorAll('.drop-over').forEach(n => n.classList.remove('drop-over'));
 });
 
-// ---- dialog e lista rapida ----
-$('fCat').innerHTML = CATEGORIE.map(c => `<option>${esc(c.nome)}</option>`).join('');
-$('rCat').innerHTML = $('fCat').innerHTML;
+// ---- finestre e lista rapida ----
 $('salva').onclick = salva;
 $('elimina').onclick = elimina;
 $('annulla').onclick = () => $('dlg').close();
 $('rAdd').onclick = aggiungiAllaLista;
 $('rTitolo').addEventListener('keydown', e => { if (e.key === 'Enter') aggiungiAllaLista(); });
+$('setChiudi').onclick = () => $('setDlg').close();
+$('nuovaCatAdd').onclick = creaCategoria;
+$('nuovaCatNome').addEventListener('keydown', e => { if (e.key === 'Enter') creaCategoria(); });
+
+$('listaCat').addEventListener('change', ev => {
+  const row = ev.target.closest('[data-cat-id]');
+  if (!row) return;
+  modificaCategoria(row.dataset.catId, ev.target.dataset.act, ev.target.value);
+});
+$('listaCat').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-act="del"]');
+  if (!b) return;
+  eliminaCategoria(b.closest('[data-cat-id]').dataset.catId);
+});
 
 // ---- avvio e aggiornamenti ----
 carica();
-sb.channel('eventi')
+sb.channel('calendario')
   .on('postgres_changes', {event: '*', schema: 'public', table: 'eventi'}, carica)
+  .on('postgres_changes', {event: '*', schema: 'public', table: 'categorie'}, carica)
   .subscribe();
 </script>
 </body>
