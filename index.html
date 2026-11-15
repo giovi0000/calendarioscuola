@@ -587,6 +587,15 @@ h2.sezLink{border-top:1px solid var(--line)}
   </form>
 </dialog>
 
+<!-- elenco allegati -->
+<dialog id="attDlg">
+  <div style="display:grid;gap:8px">
+    <h3 id="attTitolo" style="margin:0;font-size:16px">Allegati</h3>
+    <div id="attLista" style="display:grid;gap:6px"></div>
+    <div class="azioni"><button type="button" id="attChiudi">Chiudi</button></div>
+  </div>
+</dialog>
+
 <!-- finestra impostazioni -->
 <dialog id="setDlg">
   <div style="display:grid;gap:12px">
@@ -694,7 +703,7 @@ function oraDaPosizione(tl, clientY){
 }
 function linkHTML(e){
   const l = e.link ? `<a class="lk" href="${esc(e.link)}" target="_blank" rel="noopener" title="Apri il link">🔗</a>` : '';
-  const a = e.allegati && e.allegati.length ? `<span class="lk" title="Ha allegati">📎</span>` : '';
+  const a = e.allegati && e.allegati.length ? `<button type="button" class="lk" data-att="${e.id}" title="Apri allegati" style="background:none;border:0;padding:0 2px;cursor:pointer;color:inherit">📎${e.allegati.length > 1 ? e.allegati.length : ''}</button>` : '';
   return l + a;
 }
 function colore(nome){ const c = categorie.find(x => x.nome === nome); return c ? c.colore : '#eeeeee'; }
@@ -1228,6 +1237,21 @@ document.addEventListener('drop', ev => {
 document.addEventListener('dragend', () => {
   document.querySelectorAll('.drop-over').forEach(n => n.classList.remove('drop-over'));
 });
+
+// ---- clic sulla graffetta: apre l'allegato, o l'elenco se sono più di uno ----
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-att]');
+  if (!b) return;
+  e.stopPropagation(); e.preventDefault();
+  const ev = eventi.find(x => x.id === b.dataset.att);
+  if (!ev || !ev.allegati || !ev.allegati.length) return;
+  if (ev.allegati.length === 1){ window.open(ev.allegati[0].url, '_blank', 'noopener'); return; }
+  $('attTitolo').textContent = 'Allegati: ' + ev.titolo;
+  $('attLista').innerHTML = ev.allegati.map(a =>
+    `<div class="allegato"><a href="${esc(a.url)}" target="_blank" rel="noopener">📎 ${esc(a.nome)}</a></div>`).join('');
+  $('attDlg').showModal();
+}, true);
+$('attChiudi').onclick = () => $('attDlg').close();
 
 // ---- finestre e lista rapida ----
 $('salva').onclick = salva;
