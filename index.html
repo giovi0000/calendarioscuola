@@ -455,6 +455,11 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
 .catrow{display:flex;gap:6px;align-items:center}
 .catrow .cn{flex:1;min-width:0}
 .catrow input[type=color]{flex:0 0 44px}
+#setDlg{max-width:560px;width:94%;max-height:90vh;overflow:auto}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);padding:0}
+.colgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px}
+.colgrid label{font-size:12px}
 </style>
 </head>
 <body>
@@ -512,16 +517,45 @@ dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
 
 <!-- finestra impostazioni -->
 <dialog id="setDlg">
-  <div style="display:grid;gap:10px">
+  <div style="display:grid;gap:12px">
     <h3 style="margin:0;font-size:16px">Impostazioni</h3>
-    <div style="font-weight:600;font-size:13px">Categorie</div>
-    <div class="note" style="font-size:12px;color:var(--muted)">Cambia nome o colore: vale per tutte le attività. Per eliminare una categoria, prima cambia la categoria delle attività che la usano.</div>
-    <div id="listaCat" style="display:grid;gap:6px"></div>
-    <div class="riga" style="align-items:center">
-      <input id="nuovaCatNome" placeholder="Nuova categoria" maxlength="60" style="flex:1;min-width:0">
-      <input id="nuovaCatCol" type="color" value="#cfe8f7" style="width:44px;padding:2px">
-      <button type="button" id="nuovaCatAdd" class="primary">Crea</button>
+
+    <div style="display:grid;gap:6px">
+      <div style="font-weight:600;font-size:13px">Stile</div>
+      <label>Stile grafico <select id="styleSel"></select></label>
     </div>
+
+    <div style="display:grid;gap:6px">
+      <div style="font-weight:600;font-size:13px">Sfondo (solo su questo dispositivo)</div>
+      <div class="swatches" id="bgSwatches"></div>
+      <label style="flex-direction:row;align-items:center;gap:6px">Colore personalizzato <input id="bgColor" type="color" value="#e8f6ef"></label>
+      <label>Immagine (indirizzo https://…) <input id="bgUrl" type="url" placeholder="https://…"></label>
+      <div class="riga">
+        <button type="button" id="bgImg">Usa immagine</button>
+        <button type="button" id="bgReset">Predefinito</button>
+      </div>
+    </div>
+
+    <details>
+      <summary style="cursor:pointer;font-weight:600;font-size:13px">Colori (modalità chiara)</summary>
+      <div id="thLWrap" class="colgrid" style="margin-top:8px"></div>
+    </details>
+    <details>
+      <summary style="cursor:pointer;font-weight:600;font-size:13px">Colori (modalità scura)</summary>
+      <div id="thDWrap" class="colgrid" style="margin-top:8px"></div>
+    </details>
+
+    <div style="display:grid;gap:6px">
+      <div style="font-weight:600;font-size:13px">Categorie</div>
+      <div class="note" style="font-size:12px;color:var(--muted)">Cambia nome o colore: vale per tutte le attività. Per eliminare una categoria, prima cambia la categoria delle attività che la usano.</div>
+      <div id="listaCat" style="display:grid;gap:6px"></div>
+      <div class="riga" style="align-items:center">
+        <input id="nuovaCatNome" placeholder="Nuova categoria" maxlength="60" style="flex:1;min-width:0">
+        <input id="nuovaCatCol" type="color" value="#cfe8f7" style="width:44px;padding:2px">
+        <button type="button" id="nuovaCatAdd" class="primary">Crea</button>
+      </div>
+    </div>
+
     <div class="azioni"><button type="button" id="setChiudi">Chiudi</button></div>
   </div>
 </dialog>
@@ -570,22 +604,24 @@ function eventiDelGiorno(d){ const k = iso(d); return eventi.filter(e => e.giorn
 
 // ---- database ----
 async function carica(){
-  const c = await sb.from('categorie').select('*').order('posizione').order('nome');
-  if (c.error){ stato('Errore categorie: ' + c.error.message); return; }
-
-  // prima volta: salva le categorie di partenza
-  if (c.data.length === 0 && !seminate){
-    seminate = true;
-    const ins = await sb.from('categorie').insert(CATEGORIE_INIZIALI.map((x, i) => ({...x, posizione: i})));
-    if (ins.error){ stato('Errore categorie: ' + ins.error.message); return; }
-    return carica();
+  try {
+    const c = await sb.from('categorie').select('*').order('posizione').order('nome');
+    if (c.error) throw new Error('categorie: ' + c.error.message);
+    if (c.data.length === 0 && !seminate){
+      seminate = true;
+      const ins = await sb.from('categorie').insert(CATEGORIE_INIZIALI.map((x, i) => ({...x, posizione: i})));
+      if (ins.error) throw new Error('categorie: ' + ins.error.message);
+      return carica();
+    }
+    categorie = c.data;
+    const e = await sb.from('eventi').select('*').order('giorno').order('ora_inizio', {nullsFirst: true});
+    if (e.error) throw new Error('attività: ' + e.error.message);
+    eventi = e.data;
+    $('stato').textContent = '';
+  } catch (err) {
+    $('stato').textContent = 'Errore: ' + err.message + '. Controlla di aver eseguito tutto il codice SQL su Supabase.';
+    if (!categorie.length) categorie = CATEGORIE_INIZIALI.map((x, i) => ({id: 'tmp' + i, nome: x.nome, colore: x.colore, posizione: i}));
   }
-  categorie = c.data;
-
-  const e = await sb.from('eventi').select('*').order('giorno').order('ora_inizio', {nullsFirst: true});
-  if (e.error){ stato('Errore di caricamento: ' + e.error.message); return; }
-  eventi = e.data;
-
   aggiornaSelezioniCategoria();
   if ($('setDlg').open) disegnaImpostazioni();
   disegna();
@@ -658,6 +694,7 @@ function disegnaImpostazioni(){
 }
 
 function apriImpostazioni(){
+  fillTheme();
   disegnaImpostazioni();
   $('setDlg').showModal();
 }
@@ -893,6 +930,113 @@ $('listaCat').addEventListener('click', ev => {
   if (!b) return;
   eliminaCategoria(b.closest('[data-cat-id]').dataset.catId);
 });
+
+// ---- personalizzazione (salvata su questo dispositivo) ----
+const STYLES = {
+  menta:   {name:'Menta (predefinito)', light: {bg:'#e8f6ef', panel:'#ffffff', fg:'#3a1d2b', accent:'#c2457a', muted:'#6f7f76', day:'#d6eee2', allday:'#f1faf5', am:'#fbfefc', pm:'#eef7f2', item:'#fbdde9', line:'#cfe6da'}},
+  rosa:    {name:'Rosa festone', light: {bg:'#fff4f8', panel:'#fffdfb', fg:'#5a2a40', accent:'#d9557f', muted:'#9a7a8a', day:'#fbdbe7', allday:'#fdeef4', am:'#fffdfb', pm:'#fbf3f7', item:'#f6b8cf', line:'#f3d3e1'}},
+  glitte:  {name:'Glitte (pastello y2k)', light: {bg:'#fff3f7', panel:'#fffdfe', fg:'#4b3c48', accent:'#e77fa6', muted:'#8a7a85', day:'#dde874', allday:'#c9f0f7', am:'#fffdfe', pm:'#f7fbe6', item:'#ffb6c1', line:'#f7c6d6'}},
+  luna:    {name:'Luna (viola e menta)', light: {bg:'#f4f0e6', panel:'#fffcf4', fg:'#2e2f7a', accent:'#5b5fd6', muted:'#7a7fa6', day:'#dcd9f7', allday:'#e9e6fb', am:'#fffcf4', pm:'#f3f0e6', item:'#c9f2d6', line:'#d6d2ee'}},
+  brutal:  {name:'Brutal (contorni neri e collage)', light: {bg:'#f4f1ea', panel:'#ffffff', fg:'#111111', accent:'#ff5c8a', muted:'#4a4a4a', day:'#c5f04a', allday:'#ffe066', am:'#ffffff', pm:'#f7f5ee', item:'#ffe066', line:'#111111'}},
+  azzurro: {name:'Azzurro classico', light: {bg:'#cfe9f5', panel:'#ffffff', fg:'#1f3a4d', accent:'#5a9bc2', muted:'#5f7d8c', day:'#d6ecf7', allday:'#eaf6fb', am:'#f7fcfe', pm:'#eef7fb', item:'#d4ebf6', line:'#c4dcea'}},
+  postit:  {name:'Post-it (note adesive su verde)', light: {bg:'#2f7d4a', panel:'#fff48a', fg:'#2a2a2a', accent:'#e0557a', muted:'#5a5a40', day:'#ffb3c7', allday:'#9fd8ff', am:'#fff9b8', pm:'#ffef6a', item:'#ffe066', line:'#c9b832'}},
+  win95:   {name:'Windows 95 (computer vecchio)', light: {bg:'#008080', panel:'#c0c0c0', fg:'#000000', accent:'#000080', muted:'#404040', day:'#c0c0c0', allday:'#dfdfdf', am:'#c0c0c0', pm:'#b8b8b8', item:'#ffffff', line:'#808080'}},
+  custom:  {name:'Personalizzato (colori a scelta)', light: null}
+};
+const DEFAULT_STYLE = 'menta';
+const TH_DARK = {bg:'#1f141a', panel:'#2a1c24', fg:'#f7e6ee', accent:'#f08cb4', muted:'#b592a4', day:'#2e2440', allday:'#3a2330', am:'#261b22', pm:'#2a2032', item:'#4a2536', line:'#4a2f3d'};
+const TH_KEYS = ['bg','panel','fg','accent','muted','day','allday','am','pm','item','line'];
+const TH_VAR = {bg:'--bg', panel:'--panel', fg:'--fg', accent:'--accent', muted:'--muted', day:'--day-bg', allday:'--all-bg', am:'--am-bg', pm:'--pm-bg', item:'--accent-soft', line:'--line'};
+const TH_LABEL = {bg:'Sfondo', panel:'Riquadri', fg:'Testo', accent:'Accento', muted:'Secondario', day:'Intestazione giorni', allday:'Tutto il giorno', am:'Righe mattina', pm:'Righe pomeriggio', item:'Attività', line:'Linee'};
+const BG_SWATCHES = [['#e8f6ef','Menta'],['#efe6fb','Lavanda'],['#e6f1fb','Cielo'],['#f7f1e3','Sabbia'],['#e5e5e5','Grigio'],['#2b1f27','Scuro']];
+
+const isDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
+function themeSaved(){ try { return JSON.parse(localStorage.getItem('theme') || '{}'); } catch(_) { return {}; } }
+function currentStyle(){ const s = localStorage.getItem('style'); return STYLES[s] ? s : DEFAULT_STYLE; }
+function themeFor(mode){
+  const st = currentStyle();
+  const base = mode === 'light'
+    ? (STYLES[st].light || STYLES[DEFAULT_STYLE].light)
+    : TH_DARK;
+  return {...base, ...(themeSaved()[mode] || {})};
+}
+function applyTheme(){
+  const t = themeFor(isDark() ? 'dark' : 'light');
+  const st = document.documentElement.style;
+  TH_KEYS.forEach(k => st.setProperty(TH_VAR[k], t[k]));
+  applyBg();
+}
+function applyStyle(id){
+  if (!STYLES[id]) id = DEFAULT_STYLE;
+  const all = themeSaved();
+  if (id !== 'custom') all.light = {...STYLES[id].light};
+  localStorage.setItem('style', id);
+  localStorage.setItem('theme', JSON.stringify(all));
+  applyTheme(); fillTheme();
+}
+function saveTheme(id){
+  const m = /^th([LD])_(\w+)$/.exec(id); if (!m) return;
+  const mode = m[1] === 'L' ? 'light' : 'dark';
+  const all = themeSaved();
+  all[mode] = {...(all[mode] || {}), [m[2]]: $(id).value};
+  if (mode === 'light') localStorage.setItem('style', 'custom');
+  localStorage.setItem('theme', JSON.stringify(all));
+  applyTheme(); fillTheme();
+}
+function fillTheme(){
+  $('styleSel').value = currentStyle();
+  ['light','dark'].forEach(mode => {
+    const k = mode === 'light' ? 'L' : 'D';
+    const t = themeFor(mode);
+    TH_KEYS.forEach(key => { const el = $(`th${k}_${key}`); if (el && document.activeElement !== el) el.value = t[key]; });
+  });
+}
+function buildThemeInputs(){
+  ['L','D'].forEach(k => {
+    $(k === 'L' ? 'thLWrap' : 'thDWrap').innerHTML = TH_KEYS.map(key =>
+      `<label>${TH_LABEL[key]} <input type="color" id="th${k}_${key}"></label>`).join('');
+  });
+  $('styleSel').innerHTML = Object.entries(STYLES).map(([k, v]) => `<option value="${k}">${v.name}</option>`).join('');
+  $('bgSwatches').innerHTML = BG_SWATCHES.map(([c, n]) =>
+    `<button type="button" class="sw" data-bg-color="${c}" style="background:${c}" aria-label="${n}" title="${n}"></button>`).join('');
+}
+function getBg(){ try { return JSON.parse(localStorage.getItem('bg') || 'null'); } catch(_) { return null; } }
+function applyBg(){
+  const b = getBg();
+  const s = document.body.style;
+  s.backgroundColor = ''; s.backgroundImage = ''; s.backgroundSize = ''; s.backgroundPosition = ''; s.backgroundAttachment = '';
+  if (b && b.type === 'color') s.backgroundColor = b.value;
+  if (b && b.type === 'image'){
+    s.backgroundImage = `url("${b.value}")`;
+    s.backgroundSize = 'cover'; s.backgroundPosition = 'center'; s.backgroundAttachment = 'fixed';
+  }
+  document.body.classList.toggle('hasimg', !!(b && b.type === 'image'));
+}
+function setBg(b){
+  if (b) localStorage.setItem('bg', JSON.stringify(b)); else localStorage.removeItem('bg');
+  applyBg();
+}
+
+// collegamenti della personalizzazione
+$('styleSel').addEventListener('change', e => applyStyle(e.target.value));
+$('setDlg').addEventListener('change', e => {
+  if (/^th[LD]_/.test(e.target.id)) saveTheme(e.target.id);
+});
+$('bgSwatches').addEventListener('click', e => {
+  const sw = e.target.closest('[data-bg-color]');
+  if (sw) setBg({type:'color', value: sw.dataset.bgColor});
+});
+$('bgColor').addEventListener('change', e => setBg({type:'color', value: e.target.value}));
+$('bgImg').onclick = () => {
+  const url = $('bgUrl').value.trim();
+  if (!/^https:\/\/[^"'()\s]+$/.test(url)){ alert('Inserisci un indirizzo che inizia con https://'); return; }
+  setBg({type:'image', value: url});
+};
+$('bgReset').onclick = () => setBg(null);
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+buildThemeInputs();
+applyTheme();
 
 // ---- avvio e aggiornamenti ----
 carica();
