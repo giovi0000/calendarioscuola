@@ -2,45 +2,272 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Calendario di classe</title>
+<style>
+:root{--bg:#f4f8f6;--panel:#fff;--fg:#2d3a34;--muted:#748279;--line:#d6e4dc;--accent:#2f7a5b;--soft:#e6f2ec}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;padding:12px}
+.wrap{max-width:1100px;margin:0 auto;display:grid;gap:12px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px}
+.spacer{flex:1}
+h1{font-size:18px;margin:0}
+#periodo{font-weight:600;min-width:200px;text-align:center}
+button,input,select{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg)}
+button{cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.legenda{display:flex;gap:12px;flex-wrap:wrap;font-size:12px}
+.pallino{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.giorni{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.giorno{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-height:260px;display:flex;flex-direction:column;min-width:0}
+.giorno.oggi{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.testa{border:0;border-radius:10px 10px 0 0;background:var(--soft);color:var(--accent);font-weight:600;font-size:12px;padding:8px}
+.lista{padding:6px;display:flex;flex-direction:column;gap:5px}
+.ev{border:0;border-left:4px solid var(--accent);border-radius:6px;padding:5px 6px;font-size:12.5px;text-align:left;width:100%;color:var(--fg);overflow-wrap:anywhere}
+.ev.fatto{opacity:.5;text-decoration:line-through}
+.ev small{display:block;color:var(--muted);font-size:11px}
+.vuoto{color:var(--muted);font-size:12px;text-align:center;padding:10px 0}
+.mese{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.intest{font-size:12px;color:var(--accent);font-weight:600;text-align:center;padding:4px}
+.cella{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-height:90px;padding:4px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.cella.fuori{opacity:.4}
+.cella.oggi{border-color:var(--accent)}
+.num{font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;align-self:flex-start;padding:0 3px}
+.cella .ev{font-size:11px;padding:3px 4px}
+#stato{color:var(--muted);font-size:13px;min-height:1.4em}
+dialog{border:1px solid var(--line);border-radius:12px;padding:16px;max-width:380px;width:90%;background:var(--panel);color:var(--fg)}
+dialog::backdrop{background:rgba(0,0,0,.3)}
+dialog form{display:grid;gap:8px}
+dialog label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
+.riga{display:flex;gap:8px}
+.riga>label{flex:1;min-width:0}
+.azioni{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px}
+@media(max-width:700px){.giorni{grid-template-columns:1fr}.giorno{min-height:0}}
+</style>
 </head>
 <body>
-  <h1>Calendario</h1>
-  <form id="nuovo">
-    <input id="titolo" placeholder="Attività" required>
-    <input id="classe" placeholder="Classe">
-    <input id="giorno" type="date" required>
-    <button>Aggiungi</button>
+<div class="wrap">
+  <div class="bar">
+    <h1>Calendario di classe</h1>
+    <span class="spacer"></span>
+    <button id="prev" aria-label="Precedente">‹</button>
+    <span id="periodo"></span>
+    <button id="next" aria-label="Successivo">›</button>
+    <button id="oggi">Oggi</button>
+    <button id="vistaSett" aria-pressed="true">Settimana</button>
+    <button id="vistaMese" aria-pressed="false">Mese</button>
+    <button id="nuovo" class="primary">+ Attività</button>
+  </div>
+  <div class="legenda" id="legenda"></div>
+  <div id="cal"></div>
+  <div id="stato"></div>
+</div>
+
+<dialog id="dlg">
+  <form onsubmit="return false">
+    <h3 id="dlgTitolo" style="margin:0;font-size:16px">Nuova attività</h3>
+    <label>Attività <input id="fTitolo"></label>
+    <label>Classe <input id="fClasse" placeholder="es. 3ª A"></label>
+    <label>Giorno <input id="fGiorno" type="date"></label>
+    <div class="riga">
+      <label>Dalle <input id="fInizio" type="time"></label>
+      <label>Alle <input id="fFine" type="time"></label>
+    </div>
+    <label>Categoria <select id="fCat"></select></label>
+    <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="fFatto" style="width:auto"> Fatto</label>
+    <div class="azioni">
+      <button type="button" id="elimina" style="display:none">Elimina</button>
+      <button type="button" id="annulla">Annulla</button>
+      <button type="button" id="salva" class="primary">Salva</button>
+    </div>
   </form>
-  <ul id="lista"></ul>
+</dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
-const sb = window.supabase.createClient(
-  'https://jdtrxqstvtrgeyvyxefl.supabase.co',
-  'sb_publishable_y8Kig7DEzF32JUD_GW4Ijw_Lt4ybv9W'
-);
+// ---- configurazione Supabase ----
+const SUPABASE_URL = 'https://jdtrxqstvtrgeyvyxefl.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_y8Kig7DEzF32JUD_GW4Ijw_Lt4ybv9W';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-async function carica() {
-  const { data, error } = await sb.from('eventi').select('*').order('giorno');
-  if (error) return alert('Errore: ' + error.message);
-  document.getElementById('lista').innerHTML = data.map(e =>
-    `<li>${e.giorno} · ${e.classe || ''} · ${e.titolo}</li>`).join('');
+// categorie: puoi cambiare nomi e colori qui
+const CATEGORIE = [
+  {nome:'Lezione', colore:'#cfe8f7'},
+  {nome:'Compiti', colore:'#fde7c8'},
+  {nome:'Uscita', colore:'#d8f0d4'},
+  {nome:'Riunione', colore:'#eadcf5'},
+  {nome:'Altro', colore:'#eeeeee'}
+];
+
+const GIORNI = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+const MESI = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+
+// ---- stato ----
+let eventi = [];
+let vista = 'settimana';
+let inizioSett = lunedi(new Date());
+let mese = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let modifica = null;
+
+// ---- utilità ----
+const $ = id => document.getElementById(id);
+function iso(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function lunedi(d){ const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay()+6)%7)); return x; }
+function aggiungi(d, n){ const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function ora(t){ return t ? t.slice(0,5) : ''; }
+function colore(nome){ return (CATEGORIE.find(c => c.nome === nome) || CATEGORIE[CATEGORIE.length-1]).colore; }
+function stato(msg){ $('stato').textContent = msg; setTimeout(() => { if ($('stato').textContent === msg) $('stato').textContent = ''; }, 4000); }
+function eventiDelGiorno(d){ const k = iso(d); return eventi.filter(e => e.giorno === k); }
+
+// ---- database ----
+async function carica(){
+  const { data, error } = await sb.from('eventi').select('*').order('giorno').order('ora_inizio', {nullsFirst: true});
+  if (error){ stato('Errore di caricamento: ' + error.message); return; }
+  eventi = data;
+  disegna();
 }
 
-document.getElementById('nuovo').addEventListener('submit', async ev => {
-  ev.preventDefault();
-  await sb.from('eventi').insert({
-    titolo: document.getElementById('titolo').value,
-    classe: document.getElementById('classe').value,
-    giorno: document.getElementById('giorno').value
-  });
-  ev.target.reset();
+async function salva(){
+  const titolo = $('fTitolo').value.trim();
+  const giorno = $('fGiorno').value;
+  if (!titolo || !giorno){ alert('Scrivi il nome dell’attività e il giorno.'); return; }
+  const inizio = $('fInizio').value || null;
+  const fine = $('fFine').value || null;
+  if (inizio && fine && fine <= inizio){ alert('L’orario di fine deve essere dopo quello di inizio.'); return; }
+  const riga = {
+    titolo, giorno,
+    classe: $('fClasse').value.trim() || null,
+    ora_inizio: inizio, ora_fine: fine,
+    categoria: $('fCat').value,
+    fatto: $('fFatto').checked
+  };
+  const res = modifica
+    ? await sb.from('eventi').update(riga).eq('id', modifica.id)
+    : await sb.from('eventi').insert(riga);
+  if (res.error){ alert('Non salvato: ' + res.error.message); return; }
+  $('dlg').close();
   carica();
+}
+
+async function elimina(){
+  if (!modifica || !confirm('Eliminare questa attività?')) return;
+  const { error } = await sb.from('eventi').delete().eq('id', modifica.id);
+  if (error){ alert('Eliminazione non riuscita: ' + error.message); return; }
+  $('dlg').close();
+  carica();
+}
+
+// ---- form ----
+function apriForm(e, giorno){
+  modifica = e || null;
+  $('dlgTitolo').textContent = e ? 'Modifica attività' : 'Nuova attività';
+  $('fTitolo').value = e ? e.titolo : '';
+  $('fClasse').value = e ? (e.classe || '') : '';
+  $('fGiorno').value = e ? e.giorno : (giorno || iso(new Date()));
+  $('fInizio').value = e ? ora(e.ora_inizio) : '';
+  $('fFine').value = e ? ora(e.ora_fine) : '';
+  $('fCat').value = e ? e.categoria : CATEGORIE[0].nome;
+  $('fFatto').checked = e ? !!e.fatto : false;
+  $('elimina').style.display = e ? '' : 'none';
+  $('dlg').showModal();
+}
+
+// ---- disegno ----
+function cardHTML(e){
+  const orario = e.ora_inizio
+    ? ora(e.ora_inizio) + (e.ora_fine ? '–' + ora(e.ora_fine) : '')
+    : 'Tutto il giorno';
+  return `<button class="ev ${e.fatto ? 'fatto' : ''}" style="background:${colore(e.categoria)}" data-id="${e.id}">
+    ${esc(e.titolo)}${e.classe ? ' · ' + esc(e.classe) : ''}<small>${orario}</small></button>`;
+}
+
+function disegnaSettimana(){
+  const fine = aggiungi(inizioSett, 6);
+  $('periodo').textContent = `${inizioSett.getDate()} ${MESI[inizioSett.getMonth()]} – ${fine.getDate()} ${MESI[fine.getMonth()]} ${fine.getFullYear()}`;
+  const oggi = iso(new Date());
+  let html = '<div class="giorni">';
+  for (let i = 0; i < 7; i++){
+    const d = aggiungi(inizioSett, i);
+    const k = iso(d);
+    html += `<div class="giorno ${k === oggi ? 'oggi' : ''}">
+      <button class="testa" data-nuovo="${k}">${GIORNI[i]} ${d.getDate()}</button>
+      <div class="lista">${eventiDelGiorno(d).map(cardHTML).join('') || '<div class="vuoto">—</div>'}</div>
+    </div>`;
+  }
+  $('cal').innerHTML = html + '</div>';
+}
+
+function disegnaMese(){
+  const m = mese.getMonth();
+  $('periodo').textContent = MESI[m].charAt(0).toUpperCase() + MESI[m].slice(1) + ' ' + mese.getFullYear();
+  const oggi = iso(new Date());
+  const partenza = lunedi(mese);
+  let html = '<div class="mese">' + GIORNI.map(g => `<div class="intest">${g}</div>`).join('');
+  for (let i = 0; i < 42; i++){
+    const d = aggiungi(partenza, i);
+    const k = iso(d);
+    html += `<div class="cella ${d.getMonth() !== m ? 'fuori' : ''} ${k === oggi ? 'oggi' : ''}">
+      <span class="num" data-nuovo="${k}">${d.getDate()}</span>
+      ${eventiDelGiorno(d).map(cardHTML).join('')}
+    </div>`;
+  }
+  $('cal').innerHTML = html + '</div>';
+}
+
+function disegna(){
+  $('legenda').innerHTML = CATEGORIE.map(c =>
+    `<span><i class="pallino" style="background:${c.colore}"></i>${esc(c.nome)}</span>`).join('');
+  if (vista === 'settimana') disegnaSettimana(); else disegnaMese();
+}
+
+// ---- navigazione ----
+function setVista(v){
+  vista = v;
+  $('vistaSett').setAttribute('aria-pressed', v === 'settimana');
+  $('vistaMese').setAttribute('aria-pressed', v === 'mese');
+  disegna();
+}
+
+$('prev').onclick = () => {
+  if (vista === 'settimana') inizioSett = aggiungi(inizioSett, -7);
+  else mese = new Date(mese.getFullYear(), mese.getMonth() - 1, 1);
+  disegna();
+};
+$('next').onclick = () => {
+  if (vista === 'settimana') inizioSett = aggiungi(inizioSett, 7);
+  else mese = new Date(mese.getFullYear(), mese.getMonth() + 1, 1);
+  disegna();
+};
+$('oggi').onclick = () => {
+  const t = new Date();
+  inizioSett = lunedi(t);
+  mese = new Date(t.getFullYear(), t.getMonth(), 1);
+  disegna();
+};
+$('vistaSett').onclick = () => setVista('settimana');
+$('vistaMese').onclick = () => setVista('mese');
+$('nuovo').onclick = () => apriForm(null);
+
+$('cal').addEventListener('click', ev => {
+  const card = ev.target.closest('[data-id]');
+  if (card){ apriForm(eventi.find(x => x.id === card.dataset.id)); return; }
+  const nuovo = ev.target.closest('[data-nuovo]');
+  if (nuovo) apriForm(null, nuovo.dataset.nuovo);
 });
 
+// ---- dialog ----
+$('fCat').innerHTML = CATEGORIE.map(c => `<option>${esc(c.nome)}</option>`).join('');
+$('salva').onclick = salva;
+$('elimina').onclick = elimina;
+$('annulla').onclick = () => $('dlg').close();
+
+// ---- avvio e aggiornamenti ----
 carica();
+sb.channel('eventi')
+  .on('postgres_changes', {event: '*', schema: 'public', table: 'eventi'}, carica)
+  .subscribe();
 </script>
 </body>
 </html>
