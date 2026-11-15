@@ -486,6 +486,24 @@ h2.sezLink{border-top:1px solid var(--line)}
   .giorni.uno .giorno{flex:0 0 100%}
   .giorno .lista{min-height:260px}
 }
+
+/* ---- telefono: titolo in alto, poi ‹ settimana › , poi i pulsanti ---- */
+@media (max-width:700px){
+  .bar{gap:6px}
+  .bar h1{order:0;flex:1 1 100%}
+  #prev{order:1}
+  #periodo{order:2;flex:1 1 0;min-width:0;text-align:center;font-size:15px}
+  #next{order:3}
+  .bar .spacer{display:none}
+  #oggi,#vistaGiorno,#vistaSett,#vistaMese,#numGiorni{order:4}
+  #impost{order:5}
+}
+
+/* ---- giorni di lezione ---- */
+.lezGiorni{display:flex;flex-wrap:wrap;gap:6px}
+.lezGiorni label{display:flex;gap:4px;align-items:center;font-size:13px;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer}
+/* ---- countdown ---- */
+.cdTesto{color:var(--accent);font-weight:600}
 </style>
 </head>
 <body>
@@ -524,6 +542,24 @@ h2.sezLink{border-top:1px solid var(--line)}
         <button type="button" id="lSalva" class="primary">Salva link</button>
       </form>
       <div id="listaLink" class="listaLink"></div>
+      <h2 class="sezLink">Giorni di lezione</h2>
+      <p class="nota">Segna i giorni in cui hai lezione: servono per il countdown delle lezioni.</p>
+      <div class="rapida">
+        <div id="cGiorniLez" class="lezGiorni"></div>
+        <button type="button" id="lezSalva" class="primary">Salva giorni</button>
+      </div>
+      <h2 class="sezLink">Countdown</h2>
+      <p class="nota">Scrivi un evento e la sua data: vedi quante settimane mancano.</p>
+      <form class="rapida" onsubmit="return false">
+        <input id="cNome" placeholder="Nome, es. Esame di maggio">
+        <select id="cTipo">
+          <option value="settimane">Conta settimane</option>
+          <option value="lezioni">Conta lezioni</option>
+        </select>
+        <input id="cData" type="date">
+        <button type="button" id="cAdd" class="primary">Aggiungi countdown</button>
+      </form>
+      <div id="listaCountdown" class="listaLink"></div>
     </aside>
   </div>
 
@@ -1060,6 +1096,7 @@ function disegna(){
     `<span><i class="pallino" style="background:${c.colore}"></i>${esc(c.nome)}</span>`).join('');
   disegnaBozze();
   disegnaLink();
+  disegnaCountdown();
   if (vista === 'giorno') disegnaGiorno();
   else if (vista === 'settimana') disegnaSettimana();
   else disegnaMese();
@@ -1341,7 +1378,88 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', app
 buildThemeInputs();
 applyTheme();
 
+// ---- countdown in settimane (salvati su questo dispositivo) ----
+let countdowns = [];
+try { countdowns = JSON.parse(localStorage.getItem('countdown') || '[]'); } catch(_) { countdowns = []; }
+function salvaCountdowns(){ localStorage.setItem('countdown', JSON.stringify(countdowns)); }
+function giorniMancanti(dataIso){
+  const oggi = new Date(); oggi.setHours(0,0,0,0);
+  const [y, m, d] = dataIso.split('-').map(Number);
+  return Math.round((new Date(y, m-1, d) - oggi) / 86400000);
+}
+function testoCountdown(dataIso){
+  const g = giorniMancanti(dataIso);
+  if (g < 0) return 'Già passato';
+  if (g === 0) return 'Oggi!';
+  const sett = Math.floor(g / 7), giorni = g % 7;
+  const s = sett === 1 ? '1 settimana' : sett + ' settimane';
+  if (sett === 0) return giorni + (giorni === 1 ? ' giorno' : ' giorni');
+  return giorni ? s + ' e ' + giorni + (giorni === 1 ? ' giorno' : ' giorni') : s;
+}
+function disegnaCountdown(){
+  $('listaCountdown').innerHTML = countdowns.length
+    ? countdowns.map((c, i) => `
+        <div class="ev" style="background:var(--panel)">
+          <span class="ttl">${esc(c.nome)}<small class="cdTesto">${c.tipo === 'lezioni' ? testoLezioni(c.data) : testoCountdown(c.data)}</small><small>${c.data}</small></span>
+          <button type="button" class="mod" data-cd-del="${i}" title="Elimina">✕</button>
+        </div>`).join('')
+    : '<div class="vuoto">Nessun countdown</div>';
+}
+$('cAdd').onclick = () => {
+  const nome = $('cNome').value.trim();
+  const data = $('cData').value;
+  if (!nome || !data){ alert('Scrivi il nome e scegli la data.'); return; }
+  countdowns.push({nome, data, tipo: $('cTipo').value});
+  countdowns.sort((a, b) => a.data.localeCompare(b.data));
+  salvaCountdowns();
+  $('cNome').value = '';
+  $('cData').value = '';
+  disegnaCountdown();
+};
+$('listaCountdown').addEventListener('click', e => {
+  const b = e.target.closest('[data-cd-del]');
+  if (!b || !confirm('Eliminare questo countdown?')) return;
+  countdowns.splice(Number(b.dataset.cdDel), 1);
+  salvaCountdowns();
+  disegnaCountdown();
+});
+
+// ---- giorni di lezione e conteggio lezioni ----
+let giorniLezione = [];
+try { giorniLezione = JSON.parse(localStorage.getItem('giorniLezione') || '[]'); } catch(_) { giorniLezione = []; }
+const GIORNI_IDX = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+function disegnaGiorniLezione(){
+  $('cGiorniLez').innerHTML = GIORNI_IDX.map((g, i) =>
+    `<label><input type="checkbox" value="${i}" ${giorniLezione.includes(i) ? 'checked' : ''}> ${g}</label>`).join('');
+}
+$('lezSalva').onclick = () => {
+  giorniLezione = [...$('cGiorniLez').querySelectorAll('input:checked')].map(x => Number(x.value));
+  localStorage.setItem('giorniLezione', JSON.stringify(giorniLezione));
+  disegnaCountdown();
+  stato(giorniLezione.length
+    ? 'Lezioni: ' + giorniLezione.length + (giorniLezione.length === 1 ? ' giorno' : ' giorni') + ' a settimana.'
+    : 'Nessun giorno di lezione impostato.');
+};
+// quante lezioni ci sono da oggi fino al giorno scelto (il giorno scelto escluso)
+function contaLezioni(dataIso){
+  const [y, m, d] = dataIso.split('-').map(Number);
+  const fine = new Date(y, m-1, d);
+  const cur = new Date(); cur.setHours(0,0,0,0);
+  let n = 0;
+  for (let t = cur; t < fine; t = aggiungi(t, 1)){
+    if (giorniLezione.includes((t.getDay()+6)%7)) n++;
+  }
+  return n;
+}
+function testoLezioni(dataIso){
+  if (!giorniLezione.length) return 'Imposta prima i giorni di lezione';
+  if (giorniMancanti(dataIso) < 0) return 'Già passato';
+  const n = contaLezioni(dataIso);
+  return n + (n === 1 ? ' lezione' : ' lezioni') + ' prima di quel giorno · ' + testoCountdown(dataIso);
+}
+
 // ---- avvio e aggiornamenti ----
+disegnaGiorniLezione();
 carica();
 sb.channel('calendario')
   .on('postgres_changes', {event: '*', schema: 'public', table: 'eventi'}, carica)
